@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  unmasque-web:
+    build: .
+    container_name: unmasque-web
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/dev.db
+      - PYTHON_ENGINE_URL=http://unmasque-engine:8001
+      - EMAIL_USER=${EMAIL_USER}
+      - EMAIL_PASS=${EMAIL_PASS}
+      - JWT_SECRET=${JWT_SECRET:-change-me-to-a-secure-random-secret-key-in-production}
+    volumes:
+      - ./dev.db:/app/dev.db
+    restart: always
+  # Placeholder for your FastAPI Engine
+  # Uncomment and configure this when you are ready to deploy the engine
+  # unmasque-engine:
+  #   image: your-python-engine-image
+  #   container_name: unmasque-engine
+  #   ports:
+  #     - "8001:8001"
+  #   environment:
+  #     - POSTGRES_URL=postgresql://unmasque:secret@postgres:5432/unmasque_meta
+  #   restart: always

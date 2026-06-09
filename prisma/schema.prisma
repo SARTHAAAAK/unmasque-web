@@ -1,0 +1,90 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  email            String  @id
+  name             String
+  password         String
+  twoFA            Boolean @default(false)
+  totpSecret       String?
+  resetToken       String?
+  resetTokenExpiry BigInt?
+}
+
+model Connection {
+  id           String  @id
+  email        String
+  name         String
+  host         String
+  port         Int?
+  dbname       String
+  user         String
+  pw           String
+  ssl          String?
+  schema       String?
+  type         String
+  createdAt    String
+  testedAt     String?
+  testedStatus String?
+}
+
+model Extraction {
+  id             String  @id
+  email          String
+  name           String
+  db             String
+  status         String
+  started        String
+  startedAt      String
+  duration       String
+  inv            Int
+  clauses        String // JSON stringified array
+  tables         Int
+  sql            String?
+  config         String // JSON stringified object
+  targetDuration Int
+  logs           String // JSON stringified array
+}
+
+model ApiKey {
+  id       String @id
+  email    String
+  name     String
+  prefix   String
+  created  String
+  lastUsed String
+  key      String
+}
+
+model Session {
+  id        String @id
+  email     String
+  device    String
+  ip        String
+  loginTime String
+}
+
+model RefreshToken {
+  token     String @id
+  email     String
+  expiresAt BigInt
+}
+
+model Notification {
+  id      String  @id
+  email   String
+  type    String
+  title   String
+  message String
+  time    String
+  read    Boolean @default(false)
+}
