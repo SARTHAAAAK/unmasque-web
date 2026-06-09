@@ -71,13 +71,7 @@ export default function LoginPage({ onLogin }) {
         password: pw,
         remember,
       })
-      if (data.requires2FA) {
-        setRequires2FA(true)
-        setTempToken(data.tempToken)
-        setInfo('We have sent a 6-digit code to your email. Please enter it below.')
-      } else {
-        onLogin(data.user)
-      }
+      onLogin(data.user)
     } catch (err) {
       setError(err.message || 'Unable to connect to the authentication server.')
     } finally {
