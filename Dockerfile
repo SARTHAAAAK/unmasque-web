@@ -29,4 +29,4 @@ ENV NODE_ENV=production
 ENV PYTHON_ENGINE_URL="http://localhost:8001"
 
 # Start both the core engine and the main Node.js server
-CMD ["sh", "-c", "node python-engine/main.js & node server/index.js"]
+CMD ["sh", "-c", "npx prisma db push && node python-engine/main.js & node server/index.js"]
