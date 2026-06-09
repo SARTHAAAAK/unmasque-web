@@ -1351,7 +1351,7 @@ const server = app.listen(PORT, async () => {
       await prisma.extraction.update({ where: { id: j.id }, data: { status: 'failed' } })
     }
   } catch (err) {
-    console.error('Boot cleanup error', err)
+    console.error('Boot cleanup error:', err.message || err)
   }
 })
 
