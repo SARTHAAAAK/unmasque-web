@@ -13,6 +13,7 @@ RUN npm install
 COPY . .
 
 # Generate Prisma client and build frontend
+ENV DATABASE_URL="file:/app/dev.db"
 RUN npx prisma generate
 RUN npx prisma db push
 RUN npm run build
