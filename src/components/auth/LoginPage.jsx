@@ -425,42 +425,6 @@ export default function LoginPage({ onLogin }) {
                     </span>
                   </p>
                 </>
-              ) : requires2FA ? (
-                <>
-                  <div style={{ marginBottom: 16 }}>
-                    <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 5 }}>
-                      Email Verification Code
-                    </label>
-                    <input
-                      value={totpToken} onChange={e => setTotpToken(e.target.value)}
-                      type="text" placeholder="000000" maxLength={6}
-                      onKeyDown={e => e.key === 'Enter' && handleVerifyLoginTotp()}
-                      style={{
-                        background: C.surface, border: `1px solid ${C.border}`,
-                        borderRadius: 8, color: C.text, padding: '10px 14px',
-                        width: '100%', fontSize: 13, transition: 'border-color 0.15s',
-                        letterSpacing: 2, textAlign: 'center', fontFamily: F,
-                      }}
-                    />
-                  </div>
-                  <button
-                    onClick={handleVerifyLoginTotp} disabled={loading || totpToken.length !== 6}
-                    style={{
-                      width: '100%', padding: '12px', background: C.accent, color: '#fff',
-                      border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                      cursor: loading || totpToken.length !== 6 ? 'not-allowed' : 'pointer', fontFamily: F,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                      opacity: loading || totpToken.length !== 6 ? 0.8 : 1, transition: 'all 0.15s',
-                    }}
-                  >
-                    {loading ? <><Spinner size={15} color="#fff" /> Verifying…</> : 'Verify & Sign In'}
-                  </button>
-                  <p style={{ textAlign: 'center', fontSize: 12, color: C.muted, marginTop: 18 }}>
-                    <span style={{ color: C.accent, cursor: 'pointer' }} onClick={() => resetForm()}>
-                      Cancel
-                    </span>
-                  </p>
-                </>
               ) : (
                 <>
                   {isSignup && (
