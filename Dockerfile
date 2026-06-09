@@ -14,6 +14,7 @@ COPY . .
 
 # Generate Prisma client and build frontend
 RUN npx prisma generate
+RUN npx prisma db push
 RUN npm run build
 
 # Expose the API and UI port
