@@ -447,62 +447,7 @@ export default function SettingsPage({ user }) {
             </Section>
           </Card>
 
-          <Card>
-            <Section title="Two-Factor Authentication">
-              <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0',
-              }}>
-                <div>
-                  <div style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>Email Verification</div>
-                  <div style={{ fontSize: 12, color: C.muted }}>{twoFA ? 'Enabled' : 'Not configured'} — Receive a 6-digit code via email</div>
-                </div>
-                {!totpModal && <Toggle on={twoFA} onChange={handleTwoFAChange} />}
-              </div>
 
-              {totpModal === 'setup' && (
-                <div style={{ marginTop: 14, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-                  <h4 style={{ fontSize: 13, color: C.text, fontWeight: 600, marginBottom: 8 }}>Verify Email OTP</h4>
-                  <p style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
-                    We've sent a 6-digit verification code to your email. Please enter it below to enable Two-Factor Authentication.
-                  </p>
-
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1 }}>
-                      <Input value={totpToken} onChange={setTotpToken} placeholder="000000" style={{ marginBottom: 0 }} />
-                    </div>
-                    <Btn onClick={handleVerifyTotp} disabled={totpLoading || totpToken.length !== 6}>
-                      {totpLoading ? 'Verifying...' : 'Verify & Enable'}
-                    </Btn>
-                    <Btn variant="ghost" onClick={() => setTotpModal(null)} disabled={totpLoading}>Cancel</Btn>
-                  </div>
-                </div>
-              )}
-
-              {totpModal === 'disable' && (
-                <div style={{ marginTop: 14, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: 16 }}>
-                  <h4 style={{ fontSize: 13, color: C.text, fontWeight: 600, marginBottom: 8 }}>Disable Email 2FA</h4>
-                  <p style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>
-                    Please enter the 6-digit verification code to confirm disabling. You can enter 000000 to bypass for testing.
-                  </p>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1 }}>
-                      <Input value={totpToken} onChange={setTotpToken} placeholder="000000" style={{ marginBottom: 0 }} />
-                    </div>
-                    <Btn variant="danger" onClick={handleDisableTotp} disabled={totpLoading || totpToken.length !== 6}>
-                      {totpLoading ? 'Disabling...' : 'Confirm Disable'}
-                    </Btn>
-                    <Btn variant="ghost" onClick={() => setTotpModal(null)} disabled={totpLoading}>Cancel</Btn>
-                  </div>
-                </div>
-              )}
-
-              {twoFA && !totpModal && (
-                <div style={{ marginTop: 14, background: `${C.green}10`, border: `1px solid ${C.green}40`, borderRadius: 8, padding: '10px 14px', fontSize: 12, color: C.green }}>
-                  ✅ 2FA is active. You will receive an email code on login.
-                </div>
-              )}
-            </Section>
-          </Card>
         </div>
       )}
 
