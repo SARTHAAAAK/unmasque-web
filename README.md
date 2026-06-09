@@ -1,142 +1,72 @@
-# UNMASQUE Web
+# UNMASQUE Web 🕵️‍♂️
 
-A production-grade browser-based interface for the **UNMASQUE Hidden SQL Query Extraction** tool developed at the Database Systems Lab, Indian Institute of Science (IISc), Bangalore.
-
-UNMASQUE non-invasively extracts hidden SQL queries from black-box database applications by running the application repeatedly on carefully crafted mutated and synthetically generated databases. It **never reads or decompiles source code** — it only observes output.
+**UNMASQUE Web** is a production-grade, full-stack application designed to provide a modern graphical interface for the UNMASQUE extraction engine. It allows researchers and database administrators to configure, execute, monitor, and analyze hidden database architectures securely from any browser.
 
 ---
 
-## 🚀 Quick Start (Development)
+## 🌟 Key Features
 
-### Prerequisites
-- **Node.js** ≥ 18.x
-- **npm** ≥ 9.x
+- **Real-Time Monitoring:** Live WebSocket integration streams extraction logs and progress instantly to the UI without polling.
+- **Mandatory 2FA Security:** Enterprise-grade security enforcing Email-based One-Time Passwords (OTP) for all users upon login.
+- **Cloud-Native Database:** Fully integrated with Neon Serverless PostgreSQL for permanent, secure data persistence.
+- **Microservice Architecture:** A robust Node.js backend seamlessly orchestrating a dedicated Python FastAPI extraction engine.
+- **Dynamic Configuration:** Interactive wizards for setting up extraction jobs, connection limits, and performance timeouts.
 
-### Install & Run
+---
 
+## 🏗️ Technology Stack
+
+* **Frontend:** React, Vite, Vanilla CSS (Custom Design System)
+* **Backend:** Node.js, Express, Socket.io
+* **Core Engine:** Python, FastAPI
+* **Database:** Prisma ORM, Neon PostgreSQL
+* **Infrastructure:** Docker, Render
+
+---
+
+## 🚀 Live Deployment
+
+The application is fully deployed and accessible here:
+👉 **[https://unmasque-web.onrender.com](https://unmasque-web.onrender.com)**
+
+*(Note: The application is hosted on Render's Free Tier and monitored via UptimeRobot to prevent cold-starts).*
+
+---
+
+## 💻 Local Development
+
+To run UNMASQUE Web locally on your machine, you must have [Docker](https://www.docker.com/) installed.
+
+### 1. Clone the repository
 ```bash
-# 1. Clone / unzip the project
+git clone https://github.com/SARTHAAAAK/unmasque-web.git
 cd unmasque-web
-
-# 2. Install dependencies
-npm install
-
-# 3. Start the backend server (runs on port 8000)
-npm run server
-
-# 4. In a separate terminal, start the development server
-npm run dev
 ```
 
+### 2. Configure Environment Variables
+Create a `.env` file in the root directory and add the required variables:
+```env
+# Database Configuration (Use a local Postgres or Neon URL)
+DATABASE_URL="postgresql://user:password@host/db?sslmode=require"
 
-## 📁 Project Structure
+# Security Secrets
+JWT_SECRET="your-super-secret-jwt-key"
 
-```
-unmasque-web/
-├── public/
-│   └── favicon.svg
-├── src/
-│   ├── components/
-│   │   ├── auth/
-│   │   │   └── LoginPage.jsx          # Login form
-│   │   ├── connections/
-│   │   │   └── ConnectionsPage.jsx    # DB connection management
-│   │   ├── dashboard/
-│   │   │   └── DashboardPage.jsx      # Home dashboard
-│   │   ├── extraction/
-│   │   │   ├── wizard/
-│   │   │   │   └── ExtractionWizard.jsx  # 6-step new extraction wizard
-│   │   │   ├── monitor/
-│   │   │   │   └── MonitorPage.jsx    # Live extraction monitor
-│   │   │   ├── results/
-│   │   │   │   └── ResultsPage.jsx    # Extraction results & breakdown
-│   │   │   └── ExtractionsPage.jsx    # All extractions list
-│   │   ├── help/
-│   │   │   └── HelpPage.jsx           # Help & documentation
-│   │   ├── layout/
-│   │   │   └── Layout.jsx             # Sidebar + TopBar
-│   │   ├── settings/
-│   │   │   └── SettingsPage.jsx       # Settings (General/Notif/Security/API)
-│   │   └── shared/
-│   │       └── UI.jsx                 # Reusable UI primitives
-│   ├── utils/
-│   │   ├── mockData.js                # Demo data (jobs, connections, etc.)
-│   │   └── theme.js                   # Design tokens & colors
-│   ├── App.jsx                        # Root router/app shell
-│   ├── index.css                      # Global styles + Tailwind
-│   └── main.jsx                       # React entry point
-├── server/
-│   ├── index.js                       # Node.js mock backend server
-│   └── db.json                        # Persisted mock database
-├── index.html
-├── package.json
-├── tailwind.config.js
-├── postcss.config.js
-├── vite.config.js
-└── README.md
+# SMTP Email Configuration (For Mandatory 2FA)
+EMAIL_USER="your-email@gmail.com"
+EMAIL_PASS="your-google-app-password"
 ```
 
----
-
-## 🧩 Features
-
-| Feature | Status |
-|---|---|
-| Login / Auth flow | ✅ UI complete |
-| Dashboard with stats & charts | ✅ |
-| DB Connection management | ✅ |
-| 6-step Extraction Wizard | ✅ |
-| Live Monitor with real-time logs | ✅ (simulated) |
-| Extraction Results with SQL highlighting | ✅ |
-| Query Breakdown tab (clause-by-clause) | ✅ |
-| Performance Analysis charts | ✅ |
-| Verification / Checker results | ✅ |
-| My Extractions list with filters & pagination | ✅ |
-| Settings (General, Notifications, Security, API Keys) | ✅ |
-| Help & Documentation | ✅ |
-| Dark mode design | ✅ |
-| Responsive layout | ✅ |
+### 3. Build and Run via Docker Compose
+```bash
+docker compose up --build
+```
+This single command will spin up the Node.js API, the Python Extraction Engine, and serve the React frontend automatically.
 
 ---
 
-## 🔧 Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Framework | React 18 + Vite |
-| Styling | Tailwind CSS + inline CSS-in-JS |
-| Charts | Recharts |
-| Notifications | react-hot-toast |
-| Form handling | react-hook-form + zod |
-| HTTP client | Axios |
-| Fonts | DM Sans, Syne, JetBrains Mono |
+## 🛡️ Security Notes
+This project strictly enforces **Email Verification (2FA)** for all dashboard access. You must provide a valid SMTP configuration in your environment variables, otherwise, users will not be able to receive their 6-digit login codes.
 
 ---
-
-## 🔌 Backend Integration
-
-This project includes a **Node.js mock backend server** (`server/index.js`) for demonstration and development purposes. It handles authentication, simulates extraction jobs via WebSockets, and manages database connection testing.
-
-To connect to a real, production backend:
-
-1. Configure `vite.config.js` proxy to point to your FastAPI backend instead of the local Node server.
-2. Remove or replace the mock API calls in `src/services/api.js`.
-3. Update the WebSocket connection URL in `src/components/extraction/monitor/MonitorPage.jsx`.
-
-Recommended backend stack (per spec):
-- **FastAPI** (Python) + **Celery** + **Redis** + **PostgreSQL**
-- See SECTION 12–18 of the project specification for full API design
-
----
-
-## 📚 References
-
-- [SIGMOD 2021 Paper](https://dl.acm.org/doi/10.1145/3448016.3452779)
-- [VLDB 2020 Demo](http://www.vldb.org/pvldb/vol13/p2953-mohan.pdf)
-- [IISc DSL Lab](https://dsl.cds.iisc.ac.in)
-
----
-
-## 📝 License
-
-Developed for academic and research use at the Database Systems Lab, IISc Bangalore.
+*Built for Database Systems Labs.*
