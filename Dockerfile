@@ -25,5 +25,8 @@ EXPOSE 8000
 # Set production environment
 ENV NODE_ENV=production
 
-# Start the Node.js server
-CMD ["node", "server/index.js"]
+# Set default python engine URL
+ENV PYTHON_ENGINE_URL="http://localhost:8001"
+
+# Start both the core engine and the main Node.js server
+CMD ["sh", "-c", "node python-engine/main.js & node server/index.js"]
