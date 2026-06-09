@@ -566,32 +566,31 @@ app.post('/api/auth/login', async (req, res) => {
   const passwordMatches = await bcrypt.compare(password, user.password)
   if (!passwordMatches) return res.status(401).json({ message: 'Incorrect password. Please try again.' })
 
-  const tempToken = jwt.sign({ email: normalizedEmail, remember: !!remember }, JWT_SECRET, { expiresIn: '5m' })
-  const otp = Math.floor(100000 + Math.random() * 900000).toString()
-  
-  // Save the OTP in the DB as totpSecret temporarily for login validation
-  await prisma.user.update({
-    where: { email: normalizedEmail },
-    data: { totpSecret: otp }
+  const refreshToken = randomBytes(32).toString('hex')
+  const expiresAt = Date.now() + (remember ? REFRESH_TOKEN_EXPIRY_MS : SESSION_REFRESH_EXPIRY_MS)
+  const tokenHash = createHash('sha256').update(refreshToken).digest('hex')
+
+  await prisma.refreshToken.create({
+    data: { token: tokenHash, email: normalizedEmail, expiresAt: BigInt(expiresAt) }
   })
-  
-  // Print to console as a fallback since Render Free Tier blocks SMTP ports!
-  console.log(`\n==============================================`);
-  console.log(`[AUTH] 2FA Email Code for ${normalizedEmail}: ${otp}`);
-  console.log(`==============================================\n`);
 
-  try {
-    transporter.sendMail({
-      from: `"UNMASQUE" <${process.env.EMAIL_USER}>`,
-      to: normalizedEmail,
-      subject: 'Your Login Code',
-      text: `Your login verification code is: ${otp}\nThis code is valid for 5 minutes.`
-    }).catch(err => console.error("Failed to send OTP:", err))
-  } catch (err) {
-    console.error("Failed to send OTP:", err)
-  }
+  await prisma.session.create({
+    data: {
+      id: `s${Date.now()}`, email: normalizedEmail, device: req.headers['user-agent'] || 'Unknown Device',
+      ip: req.ip || req.connection.remoteAddress || '127.0.0.1', loginTime: new Date().toISOString()
+    }
+  })
 
-  return res.json({ requires2FA: true, email: normalizedEmail, tempToken })
+  const cookieOptions = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' }
+  if (remember) cookieOptions.maxAge = REFRESH_TOKEN_EXPIRY_MS
+
+  res.cookie('unmasqueRefreshToken', refreshToken, cookieOptions)
+  res.cookie('unmasqueAccessToken', createAccessToken({ email: user.email, name: user.name }), { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 15 * 60 * 1000 })
+  return res.json({
+    user: { name: user.name, email: user.email, twoFA: false },
+    accessToken: createAccessToken({ email: user.email, name: user.name }),
+    remember: !!remember,
+  })
 })
 
 app.post('/api/auth/login/verify', async (req, res) => {
