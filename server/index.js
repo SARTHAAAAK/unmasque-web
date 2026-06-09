@@ -104,6 +104,7 @@ const SESSION_REFRESH_EXPIRY_MS = 24 * 60 * 60 * 1000
 const app = express()
 
 // 0. Logging and Compression
+app.set('trust proxy', 1)
 app.use(morgan('dev'))
 app.use(compression())
 
