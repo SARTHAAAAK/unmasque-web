@@ -260,9 +260,9 @@ export default function LoginPage({ onLogin }) {
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
           <div style={{
             width: 60, height: 60, borderRadius: 16,
-            background: \`linear-gradient(135deg, \${C.accent}, \${C.cyan})\`,
+            background: `linear-gradient(135deg, ${C.accent}, ${C.cyan})`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 28, margin: '0 auto 18px', boxShadow: \`0 0 30px \${C.accent}40\`,
+            fontSize: 28, margin: '0 auto 18px', boxShadow: `0 0 30px ${C.accent}40`,
           }}>🔍</div>
           <h1 className="login-title" style={{ fontFamily: FH, fontSize: 26, fontWeight: 800, color: C.text }}>UNMASQUE Web</h1>
           <p style={{ fontSize: 13, color: C.muted, marginTop: 6 }}>
@@ -272,7 +272,7 @@ export default function LoginPage({ onLogin }) {
 
         {/* Form card */}
         <div className="login-card" style={{
-          background: C.card, border: \`1px solid \${C.border}\`,
+          background: C.card, border: `1px solid ${C.border}`,
           borderRadius: 16, padding: 30,
         }}>
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
