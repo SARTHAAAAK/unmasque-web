@@ -575,12 +575,12 @@ app.post('/api/auth/login', async (req, res) => {
   })
   
   try {
-    await transporter.sendMail({
+    transporter.sendMail({
       from: `"UNMASQUE" <${process.env.EMAIL_USER}>`,
       to: normalizedEmail,
       subject: 'Your Login Code',
       text: `Your login verification code is: ${otp}\nThis code is valid for 5 minutes.`
-    })
+    }).catch(err => console.error("Failed to send OTP:", err))
   } catch (err) {
     console.error("Failed to send OTP:", err)
   }
