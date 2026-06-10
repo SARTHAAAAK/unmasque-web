@@ -1196,36 +1196,40 @@ app.delete('/api/connections/:id', authenticateUser, async (req, res) => {
 });
 
 app.post('/api/auth/forgot', async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ message: 'Email is required.' });
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email is required.' });
 
-  const normalizedEmail = email.trim().toLowerCase();
-  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-  
-  if (user) {
-    const codeString = randomInt(100000, 999999).toString();
-    const tokenHash = createHash('sha256').update(codeString).digest('hex');
-    const expiry = Date.now() + 15 * 60 * 1000;
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    
+    if (user) {
+      const codeString = Math.floor(100000 + Math.random() * 900000).toString();
+      const tokenHash = createHash('sha256').update(codeString).digest('hex');
+      const expiry = Date.now() + 15 * 60 * 1000;
 
-    await prisma.user.update({
-      where: { email: normalizedEmail },
-      data: { resetToken: tokenHash, resetTokenExpiry: BigInt(expiry) }
-    });
-
-    try {
-      await transporter.sendMail({
-        from: `"UNMASQUE System" <${process.env.EMAIL_USER}>`,
-        to: normalizedEmail,
-        subject: 'Password Reset Code - UNMASQUE',
-        text: `Your password reset code is: ${codeString}\nThis code will expire in 15 minutes.`
+      await prisma.user.update({
+        where: { email: normalizedEmail },
+        data: { resetToken: tokenHash, resetTokenExpiry: BigInt(expiry) }
       });
-    } catch (err) {
-      console.error('Failed to send reset email', err);
-    }
-  }
 
-  // Always return success
-  return res.json({ message: 'If an account exists, a reset code has been sent.' });
+      try {
+        await transporter.sendMail({
+          from: `"UNMASQUE System" <${process.env.EMAIL_USER}>`,
+          to: normalizedEmail,
+          subject: 'Password Reset Code - UNMASQUE',
+          text: `Your password reset code is: ${codeString}\nThis code will expire in 15 minutes.`
+        });
+      } catch (err) {
+        console.error('Failed to send reset email', err);
+      }
+    }
+
+    return res.json({ message: 'If an account exists, a reset code has been sent.' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    return res.status(500).json({ message: 'Internal server error while processing request.' });
+  }
 });
 
 app.post('/api/auth/verify-reset', async (req, res) => {
