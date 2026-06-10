@@ -770,10 +770,7 @@ app.delete('/api/auth/apikeys/:id', authenticateUser, async (req, res) => {
 
 const transporter = nodemailer.createTransport({
   service: 'gmail',
-  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-  connectionTimeout: 5000,
-  greetingTimeout: 5000,
-  socketTimeout: 5000
+  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
 })
 
 app.post('/api/auth/email-otp/setup', authenticateUser, async (req, res) => {
@@ -1219,16 +1216,19 @@ app.post('/api/auth/forgot', async (req, res) => {
       data: { resetToken: tokenHash, resetTokenExpiry: BigInt(expiry) }
     });
 
-    transporter.sendMail({
-      from: `"UNMASQUE" <${process.env.EMAIL_USER}>`,
-      to: normalizedEmail,
-      subject: 'Password Reset Code - UNMASQUE',
-      text: `Your password reset code is: ${codeString}\nThis code will expire in 15 minutes.`
-    }).catch(err => {
-      console.error('Failed to send reset email', err);
-    });
+      try {
+        await transporter.sendMail({
+          from: `"UNMASQUE" <${process.env.EMAIL_USER}>`,
+          to: normalizedEmail,
+          subject: 'Password Reset Code - UNMASQUE',
+          text: `Your password reset code is: ${codeString}\nThis code will expire in 15 minutes.`
+        });
+      } catch (err) {
+        console.error('Failed to send reset email', err);
+        return res.status(500).json({ message: `Email Delivery Failed: ${err.message}` });
+      }
 
-    return res.json({ message: 'Verification code sent to your email.' });
+      return res.json({ message: 'Verification code sent to your email.' });
   } catch (err) {
     console.error('Forgot password error:', err);
     return res.status(500).json({ message: 'Internal server error while processing request.' });
