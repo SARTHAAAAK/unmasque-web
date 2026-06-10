@@ -1206,27 +1206,29 @@ app.post('/api/auth/forgot', async (req, res) => {
     const normalizedEmail = email.trim().toLowerCase();
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     
-    if (user) {
-      const codeString = Math.floor(100000 + Math.random() * 900000).toString();
-      const tokenHash = createHash('sha256').update(codeString).digest('hex');
-      const expiry = Date.now() + 15 * 60 * 1000;
-
-      await prisma.user.update({
-        where: { email: normalizedEmail },
-        data: { resetToken: tokenHash, resetTokenExpiry: BigInt(expiry) }
-      });
-
-      transporter.sendMail({
-        from: `"UNMASQUE System" <${process.env.EMAIL_USER}>`,
-        to: normalizedEmail,
-        subject: 'Password Reset Code - UNMASQUE',
-        text: `Your password reset code is: ${codeString}\nThis code will expire in 15 minutes.`
-      }).catch(err => {
-        console.error('Failed to send reset email', err);
-      });
+    if (!user) {
+      return res.status(404).json({ message: 'Account not found. Please check the email address you entered.' });
     }
 
-    return res.json({ message: 'If an account exists, a reset code has been sent.' });
+    const codeString = Math.floor(100000 + Math.random() * 900000).toString();
+    const tokenHash = createHash('sha256').update(codeString).digest('hex');
+    const expiry = Date.now() + 15 * 60 * 1000;
+
+    await prisma.user.update({
+      where: { email: normalizedEmail },
+      data: { resetToken: tokenHash, resetTokenExpiry: BigInt(expiry) }
+    });
+
+    transporter.sendMail({
+      from: `"UNMASQUE" <${process.env.EMAIL_USER}>`,
+      to: normalizedEmail,
+      subject: 'Password Reset Code - UNMASQUE',
+      text: `Your password reset code is: ${codeString}\nThis code will expire in 15 minutes.`
+    }).catch(err => {
+      console.error('Failed to send reset email', err);
+    });
+
+    return res.json({ message: 'Verification code sent to your email.' });
   } catch (err) {
     console.error('Forgot password error:', err);
     return res.status(500).json({ message: 'Internal server error while processing request.' });
