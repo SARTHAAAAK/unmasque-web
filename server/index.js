@@ -1213,7 +1213,6 @@ app.post('/api/auth/forgot', async (req, res) => {
     });
 
     try {
-      const transporter = await getTransporter();
       await transporter.sendMail({
         from: `"UNMASQUE System" <${process.env.EMAIL_USER}>`,
         to: normalizedEmail,
