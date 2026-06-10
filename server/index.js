@@ -26,7 +26,7 @@ function buildDbConfig(connData) {
     return {
       host: connData.host, port: connData.port || 5432, database: connData.dbname,
       user: connData.user, password: decrypt(connData.pw),
-      ssl: connData.ssl === 'disable' ? false : { rejectUnauthorized: false },
+      ssl: connData.ssl === 'disable' ? false : (connData.ssl === 'require' ? 'require' : { rejectUnauthorized: false }),
       connectionTimeoutMillis: 5000
     };
   } else if (connData.type === 'SQL Server') {
@@ -769,8 +769,14 @@ app.delete('/api/auth/apikeys/:id', authenticateUser, async (req, res) => {
 })
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false,
+  requireTLS: true,
+  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000
 })
 
 app.post('/api/auth/email-otp/setup', authenticateUser, async (req, res) => {
