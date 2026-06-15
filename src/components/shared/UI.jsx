@@ -1,4 +1,8 @@
 import { C, F, FM, FH } from '@/utils/theme.js'
+import React, { useEffect, useRef } from 'react'
+import Prism from 'prismjs'
+import 'prismjs/components/prism-sql'
+import 'prismjs/themes/prism-tomorrow.css'
 
 // ─── BADGE ────────────────────────────────────────────────────
 export function Badge({ status }) {
@@ -219,49 +223,20 @@ export function ClausePill({ c }) {
 }
 
 // ─── SQL SYNTAX HIGHLIGHTER ───────────────────────────────────
-const KW = new Set(['SELECT','FROM','WHERE','JOIN','INNER','LEFT','RIGHT','OUTER','ON','GROUP','BY','ORDER','HAVING','LIMIT','AS','AND','OR','NOT','NULL','DISTINCT','UNION','WITH','CASE','WHEN','THEN','ELSE','END','INSERT','UPDATE','DELETE','CREATE','TABLE','VIEW','INDEX','DROP','ALTER','INTO','VALUES','SET'])
-const FN_SET = new Set(['SUM','COUNT','AVG','MIN','MAX','COALESCE','DATE','SUBSTRING','LENGTH','TRIM','ROUND','CAST','CONVERT','UPPER','LOWER','ISNULL','NVL'])
-
-function tokenizeLine(line) {
-  const out = []
-  const re = /('(?:[^']|'')*')|(\b[A-Z_][A-Z0-9_]*\b)|(\b\d+(?:\.\d+)?\b)|(--.*$)|([\(\),*;=<>!+\-/])|(\s+)/gi
-  let m, last = 0
-  while ((m = re.exec(line)) !== null) {
-    if (m.index > last) out.push({ t: 'plain', v: line.slice(last, m.index) })
-    const [full, str, word, num, cmt, op] = m
-    if (str)  out.push({ t: 'str', v: full })
-    else if (cmt)  out.push({ t: 'cmt', v: full })
-    else if (word) out.push({ t: KW.has(word.toUpperCase()) ? 'kw' : FN_SET.has(word.toUpperCase()) ? 'fn' : 'id', v: full })
-    else if (num)  out.push({ t: 'num', v: full })
-    else if (op)   out.push({ t: 'op', v: full })
-    else           out.push({ t: 'sp', v: full })
-    last = m.index + full.length
-  }
-  if (last < line.length) out.push({ t: 'plain', v: line.slice(last) })
-  return out
-}
-
-const tokenColor = {
-  kw: '#7DD3FC', fn: '#86EFAC', str: '#FCA5A5', num: '#FCD34D',
-  cmt: '#4A5E88', op: '#C4B5FD', id: '#DDE4F4', plain: '#DDE4F4', sp: '#DDE4F4',
-}
-
 export function SqlView({ code }) {
+  const codeRef = useRef(null)
+
+  useEffect(() => {
+    if (codeRef.current) {
+      Prism.highlightElement(codeRef.current)
+    }
+  }, [code])
+
   return (
     <pre style={{ margin: 0, fontFamily: FM, fontSize: 13, lineHeight: 1.75, overflowX: 'auto', background: 'transparent' }}>
-      {code.split('\n').map((line, i) => (
-        <div key={i} style={{ display: 'flex', minHeight: 23 }}>
-          <span style={{
-            color: C.dim, minWidth: 32, userSelect: 'none',
-            textAlign: 'right', paddingRight: 16, flexShrink: 0, fontSize: 11,
-          }}>{i + 1}</span>
-          <span>
-            {tokenizeLine(line).map((tok, j) => (
-              <span key={j} style={{ color: tokenColor[tok.t] }}>{tok.v}</span>
-            ))}
-          </span>
-        </div>
-      ))}
+      <code ref={codeRef} className="language-sql" style={{ fontFamily: FM }}>
+        {code}
+      </code>
     </pre>
   )
 }

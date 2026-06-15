@@ -26,7 +26,7 @@ function buildDbConfig(connData) {
     return {
       host: connData.host, port: connData.port || 5432, database: connData.dbname,
       user: connData.user, password: decrypt(connData.pw),
-      ssl: connData.ssl === 'disable' ? false : (connData.ssl === 'require' ? 'require' : { rejectUnauthorized: false }),
+      ssl: connData.ssl === 'disable' ? false : (connData.ssl === 'require' ? { rejectUnauthorized: true } : { rejectUnauthorized: false }),
       connectionTimeoutMillis: 5000
     };
   } else if (connData.type === 'SQL Server') {
@@ -121,7 +121,10 @@ const authLimiter = rateLimit({
 app.use('/api/auth/login', authLimiter)
 app.use('/api/auth/forgot', authLimiter)
 
-app.use(cors({ origin: true, credentials: true }))
+app.use(cors({ 
+  origin: process.env.NODE_ENV === 'production' ? 'https://unmasque-web.onrender.com' : true, 
+  credentials: true 
+}))
 app.use(express.json())
 
 // 3. Serve Static Frontend (Production Build)
@@ -445,11 +448,13 @@ async function runRealPipeline(jobId) {
       pythonEngineResponse = await axios.post(`${pythonEngineUrl}/api/extract`, {
         connection: {
           host: connData.host,
-          port: connData.port,
+          port: connData.port || (connData.type === 'PostgreSQL' ? 5432 : 1433),
           dbname: connData.dbname,
           user: connData.user,
           password: decrypt(connData.pw),
-          type: connData.type
+          type: connData.type,
+          ssl: connData.ssl,
+          schema: connData.schema
         },
         config: job.config
       });
@@ -496,22 +501,33 @@ async function runRealPipeline(jobId) {
           logs: JSON.stringify(job.logs)
         }
       });
+      if (io) io.emit('dashboard_update');
       Object.assign(job, updatedJob);
     }
     
     if (io) {
-      io.of('/ws/jobs/' + jobId + '/stream').emit('step_completed', { jobId, stepIndex: 9, stepName: 'Query Assembly', summary: 'Query assembled and verified', durationMs: 1000 });
       io.of('/ws/jobs/' + jobId + '/stream').emit('complete', job);
     }
   } catch (err) {
     const errJob = await prisma.extraction.findUnique({ where: { id: jobId } });
     if (errJob && errJob.status !== 'aborted') {
-      const logs = errJob.logs ? JSON.parse(errJob.logs) : [];
-      logs.push(`[ERROR] Pipeline failed: ${err.message}`);
+      // FIX: Use the in-memory job.logs to prevent wiping out the log history!
+      let currentLogs = [];
+      try {
+        if (typeof job !== 'undefined' && Array.isArray(job.logs)) {
+          currentLogs = job.logs;
+        } else if (errJob.logs) {
+          currentLogs = JSON.parse(errJob.logs);
+        }
+      } catch(e) {}
+      
+      currentLogs.push(`[ERROR] Pipeline failed: ${err.message}`);
+      
       const updatedJob = await prisma.extraction.update({
         where: { id: jobId },
-        data: { status: 'failed', logs: JSON.stringify(logs) }
+        data: { status: 'failed', logs: JSON.stringify(currentLogs) }
       });
+      if (io) io.emit('dashboard_update');
       if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('error', { message: 'Pipeline failed: ' + err.message, job: updatedJob });
     }
   }
@@ -946,6 +962,7 @@ app.post('/api/extractions', authenticateUser, async (req, res) => {
   }
 
   await prisma.extraction.create({ data: job })
+  if (io) io.emit('dashboard_update');
 
   job.clauses = JSON.parse(job.clauses)
   job.config = JSON.parse(job.config)
@@ -990,6 +1007,7 @@ app.delete('/api/extractions/:id', authenticateUser, async (req, res) => {
   try {
     const result = await prisma.extraction.deleteMany({ where: { id, email: req.user.email } })
     if (result.count === 0) throw new Error('Not found')
+    if (io) io.emit('dashboard_update');
     return res.json({ message: 'Extraction deleted.' })
   } catch(e) {
     return res.status(404).json({ message: 'Extraction not found.' })
@@ -1003,6 +1021,7 @@ app.post('/api/extractions/:id/abort', authenticateUser, async (req, res) => {
   if (job.status !== 'running') return res.status(400).json({ message: 'Job is not running.' })
   
   await prisma.extraction.update({ where: { id }, data: { status: 'aborted' } })
+  if (io) io.emit('dashboard_update');
   job.status = 'aborted'
   return res.json({ message: 'Extraction aborted.', job })
 })
@@ -1011,6 +1030,7 @@ app.delete('/api/extractions', authenticateUser, async (req, res) => {
   const { ids } = req.body
   if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ message: 'No IDs provided.' })
   await prisma.extraction.deleteMany({ where: { id: { in: ids }, email: req.user.email } })
+  if (io) io.emit('dashboard_update');
   return res.json({ message: 'Extractions deleted.' })
 })
 

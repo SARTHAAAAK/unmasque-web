@@ -1,8 +1,9 @@
 import { C, FH, FM } from '../../utils/theme.js'
 import { StatCard, Card, Section, Badge, Btn, ClausePill, ProgressBar } from '../shared/UI.jsx'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 
 import { getExtractions, getConnections } from '../../services/api.js'
+import { io } from 'socket.io-client'
 
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -45,33 +46,38 @@ export default function DashboardPage({ setPage }) {
 
     load()
     
-    const interval = setInterval(fetchList, 2000)
+    const socket = io({ path: '/ws/socket.io' })
+    socket.on('dashboard_update', () => {
+      fetchList()
+    })
 
     return () => { 
       active = false 
-      clearInterval(interval)
+      socket.disconnect()
     }
   }, [])
 
-  const runningJobs = items.filter(j => j.status === 'running')
+  const runningJobs = useMemo(() => items.filter(j => j.status === 'running'), [items])
   const runningJob = runningJobs[0]
 
   const total = totalExtractions
-  const successful = items.filter(j => j.status === 'completed').length
+  const successful = useMemo(() => items.filter(j => j.status === 'completed').length, [items])
   const successRate = total > 0 ? Math.round((successful / total) * 100) : 0
   const totalConns = conns.length
 
-  const chartData = items.slice(0, 15).reverse().map(j => {
-    let t = 0
-    if (j.duration && j.duration !== '—') {
-      const parts = j.duration.split(' ')
-      for (const p of parts) {
-        if (p.includes('m')) t += parseInt(p) || 0
-        if (p.includes('s')) t += (parseInt(p) || 0) / 60
+  const chartData = useMemo(() => {
+    return items.slice(0, 15).reverse().map(j => {
+      let t = 0
+      if (j.duration && j.duration !== '—') {
+        const parts = j.duration.split(' ')
+        for (const p of parts) {
+          if (p.includes('m')) t += parseInt(p) || 0
+          if (p.includes('s')) t += (parseInt(p) || 0) / 60
+        }
       }
-    }
-    return { n: j.name.substring(0, 8), t: Number(t.toFixed(2)) }
-  })
+      return { n: j.name.substring(0, 8), t: Number(t.toFixed(2)) }
+    })
+  }, [items])
 
   return (
 

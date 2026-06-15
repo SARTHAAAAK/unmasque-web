@@ -4,6 +4,7 @@ import { C } from './utils/theme.js'
 import { Sidebar, TopBar } from './components/layout/Layout.jsx'
 import { Spinner } from './components/shared/UI.jsx'
 import { refreshSession, logout } from './services/auth.js'
+import { useSessionStorage } from './hooks/useSessionStorage.js'
 
 
 // Pages
@@ -28,7 +29,7 @@ export default function App() {
   const page = location.pathname === '/' ? 'dashboard' : location.pathname.substring(1)
   const setPage = (p) => navigate('/' + p)
   const [sidebarCollapsed, setCollapsed] = useState(false)
-  const [selectedExtractionId, setSelectedExtractionId] = useState(() => sessionStorage.getItem('selectedExtractionId') || null) // FIX: Initialize ID directly from sessionStorage
+  const [selectedExtractionId, setSelectedExtractionId] = useSessionStorage('selectedExtractionId', null)
 
   useEffect(() => {
     let active = true
@@ -51,13 +52,7 @@ export default function App() {
     return () => { active = false }
   }, [])
 
-  useEffect(() => { // FIX: Keep sessionStorage perfectly in sync with React state
-    if (selectedExtractionId) {
-      sessionStorage.setItem('selectedExtractionId', selectedExtractionId)
-    } else {
-      sessionStorage.removeItem('selectedExtractionId')
-    }
-  }, [selectedExtractionId])
+
 
   const handleLogout = async () => {
     try {
