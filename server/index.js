@@ -449,7 +449,7 @@ async function runRealPipeline(jobId) {
         connection: {
           host: connData.host,
           port: connData.port || (connData.type === 'PostgreSQL' ? 5432 : 1433),
-          dbname: connData.dbname,
+          dbname: (connData.type === 'PostgreSQL' && (connData.ssl !== 'disable' || connData.host.includes('.neon.tech'))) ? `${connData.dbname} sslmode=require` : connData.dbname,
           user: connData.user,
           password: decrypt(connData.pw),
           type: connData.type,
