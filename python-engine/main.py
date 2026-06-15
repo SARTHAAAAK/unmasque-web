@@ -16,6 +16,7 @@ class ConnectionParams(BaseModel):
     user: str
     password: str
     type: str
+    sslmode: Optional[str] = None
 
 class ExtractRequest(BaseModel):
     connection: ConnectionParams
@@ -45,7 +46,8 @@ async def run_extraction(req: ExtractRequest):
                 port=req.connection.port,
                 dbname=req.connection.dbname,
                 user=req.connection.user,
-                password=req.connection.password
+                password=req.connection.password,
+                sslmode=req.connection.sslmode or 'prefer'
             )
             cur = conn.cursor()
             logs.append(f"[PYTHON] Successfully authenticated to PostgreSQL database.")
