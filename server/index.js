@@ -454,6 +454,7 @@ async function runRealPipeline(jobId) {
           password: decrypt(connData.pw),
           type: connData.type,
           ssl: connData.ssl,
+          sslmode: connData.ssl === 'disable' ? 'disable' : 'require',
           schema: connData.schema
         },
         config: job.config
