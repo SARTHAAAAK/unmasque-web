@@ -316,8 +316,9 @@ async function getTransporter() {
 }
 
 async function runRealPipeline(jobId) {
+  let job;
   try {
-    let job = await prisma.extraction.findUnique({ where: { id: jobId } });
+    job = await prisma.extraction.findUnique({ where: { id: jobId } });
     if (!job || job.status !== 'running') return;
     job.clauses = job.clauses ? JSON.parse(job.clauses) : [];
     job.config = job.config ? JSON.parse(job.config) : {};
@@ -449,12 +450,12 @@ async function runRealPipeline(jobId) {
         connection: {
           host: connData.host,
           port: connData.port || (connData.type === 'PostgreSQL' ? 5432 : 1433),
-          dbname: (connData.type === 'PostgreSQL' && (connData.ssl !== 'disable' || connData.host.includes('.neon.tech'))) ? `${connData.dbname} sslmode=require` : connData.dbname,
+          dbname: connData.dbname,
           user: connData.user,
           password: decrypt(connData.pw),
           type: connData.type,
           ssl: connData.ssl,
-          sslmode: connData.ssl === 'disable' ? 'disable' : 'require',
+          sslmode: (connData.type === 'PostgreSQL' && (connData.ssl !== 'disable' || connData.host.includes('.neon.tech'))) ? 'require' : 'disable',
           schema: connData.schema
         },
         config: job.config

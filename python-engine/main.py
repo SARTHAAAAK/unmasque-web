@@ -17,6 +17,7 @@ class ConnectionParams(BaseModel):
     password: str
     type: str
     sslmode: Optional[str] = None
+    schema: Optional[str] = None
 
 class ExtractRequest(BaseModel):
     connection: ConnectionParams
@@ -52,7 +53,7 @@ async def run_extraction(req: ExtractRequest):
             cur = conn.cursor()
             logs.append(f"[PYTHON] Successfully authenticated to PostgreSQL database.")
             
-            schema = req.config.get('schema', 'public')
+            schema = req.connection.schema or 'public'
             cur.execute(f"SET search_path TO {schema}")
             
             selected_tables = req.config.get('selectedTables', [])
