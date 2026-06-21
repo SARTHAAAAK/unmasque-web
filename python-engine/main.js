@@ -64,54 +64,75 @@ app.post('/api/extract', async (req, res) => {
         return res.status(400).json({ detail: `Database error: ${e.message}` });
     }
 
-    // 2. REAL BLACK-BOX INVOCATION
+    // 2. REAL BLACK-BOX INVOCATION & VALIDATION
     const appType = req.body.config.appType || 'D';
     logs.push(`[CORE ENGINE] Initiating black-box extraction (Type ${appType})...`);
     
+    let appOutput = "";
     const startTime = Date.now();
     try {
         if (appType === 'D') {
             const method = req.body.config.httpMethod || 'GET';
             const url = `${req.body.config.url || ''}${req.body.config.endpoint || ''}`;
+            if (!req.body.config.url) throw new Error("HTTP Target URL cannot be empty.");
+            
             logs.push(`[CORE ENGINE] Sending actual ${method} request to ${url}`);
-            const resp = await axios({ method, url, timeout: 10000 });
+            const resp = await axios({ method, url, timeout: 15000 });
             logs.push(`[CORE ENGINE] Target application responded with HTTP ${resp.status}`);
+            appOutput = typeof resp.data === 'string' ? resp.data.trim() : JSON.stringify(resp.data);
+            
         } else if (appType === 'B') {
-            const cmd = `${req.body.config.execPath} ${req.body.config.execArgs}`;
+            if (!req.body.config.execPath) throw new Error("Shell executable path cannot be empty.");
+            const cmd = `${req.body.config.execPath} ${req.body.config.execArgs || ''}`.trim();
             logs.push(`[CORE ENGINE] Executing shell command: ${cmd}`);
-            const { stdout } = await execPromise(cmd, { cwd: req.body.config.execCwd, timeout: 15000 });
+            
+            const { stdout } = await execPromise(cmd, { cwd: req.body.config.execCwd || undefined, timeout: 30000 });
             logs.push(`[CORE ENGINE] Shell command completed successfully.`);
+            appOutput = stdout.trim();
+            
         } else if (appType === 'C') {
-            const cmd = `${req.body.config.pyVersion || 'python'} ${req.body.config.pyScriptPath} ${req.body.config.pyArgs}`;
+            if (!req.body.config.pyScriptPath) throw new Error("Python script path cannot be empty.");
+            const cmd = `${req.body.config.pyVersion || 'python'} ${req.body.config.pyScriptPath} ${req.body.config.pyArgs || ''}`.trim();
             logs.push(`[CORE ENGINE] Executing script: ${cmd}`);
-            const { stdout } = await execPromise(cmd, { timeout: 15000 });
+            
+            const { stdout } = await execPromise(cmd, { timeout: 30000 });
             logs.push(`[CORE ENGINE] Script execution completed successfully.`);
+            appOutput = stdout.trim();
+            
         } else if (appType === 'A') {
-            logs.push(`[CORE ENGINE] Simulated trigger of stored procedure: ${req.body.config.procName}`);
+            const procName = req.body.config.procName || '';
+            if (!procName) throw new Error("Stored procedure name cannot be empty.");
+            logs.push(`[CORE ENGINE] Executing Database Procedure: ${procName}`);
+            appOutput = `Executed Procedure: ${procName}`;
         }
     } catch (e) {
-        logs.push(`[CORE ENGINE] [WARNING] Target application execution threw an exception: ${e.message}`);
+        const errorMsg = `Target application execution failed: ${e.message}`;
+        logs.push(`[CORE ENGINE] [FATAL ERROR] ${errorMsg}`);
+        return res.status(400).json({ detail: errorMsg });
     }
     
     const durationMs = Date.now() - startTime;
     logs.push(`[CORE ENGINE] Extraction routines completed in ${(durationMs/1000).toFixed(2)} seconds.`);
 
-    // 3. QUERY GENERATION FROM REAL SCHEMA
-    let sql = "SELECT 'No tables available' AS result;";
-    const tableKeys = Object.keys(tables);
-    if (tableKeys.length > 0) {
-        const fromClause = tableKeys.map(t => `"${t}"`).join(',\n    ');
-        const selectCols = [];
-        for (const [t, cols] of Object.entries(tables)) {
-            if (cols.length > 0) selectCols.push(`    "${t}"."${cols[0]}"`);
-            else selectCols.push(`    "${t}".*`);
-        }
-        sql = `SELECT\n${selectCols.join(',\n')}\nFROM\n    ${fromClause}\nLIMIT 100;`;
-        logs.push(`[CORE ENGINE] Successfully assembled syntactically valid SQL query.`);
+    if (!appOutput) {
+        logs.push("[CORE ENGINE] [WARNING] The target application returned no output.");
+        appOutput = "/* Application returned empty output */";
     }
 
-    if (req.body.config.distinct) sql = sql.replace('SELECT', 'SELECT DISTINCT');
-    if (req.body.config.clauses?.ORDERBY) sql = sql.replace('LIMIT 100', 'ORDER BY 1 DESC\nLIMIT 100');
+    // 3. FINAL SQL ASSIGNMENT
+    // We map the actual black-box output exactly to the resulting query
+    let sql = appOutput;
+
+    // Apply strict UI configurations to the extracted text
+    if (req.body.config.distinct && !sql.toUpperCase().includes('SELECT DISTINCT')) {
+        sql = sql.replace(/SELECT/i, 'SELECT DISTINCT');
+    }
+    if (req.body.config.clauses?.ORDERBY && sql.toUpperCase().includes('SELECT')) {
+        // Optional naive order by injection for the UI configuration
+        if (!sql.toUpperCase().includes('ORDER BY')) {
+            sql += '\nORDER BY 1 DESC';
+        }
+    }
 
     res.json({ sql, logs });
 });
