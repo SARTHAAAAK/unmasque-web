@@ -42,6 +42,7 @@ async def run_extraction(req: ExtractRequest):
     tables = {}
     try:
         if req.connection.type == 'PostgreSQL':
+            logs.append(f"[PYTHON] Connecting to PostgreSQL with sslmode: {req.connection.sslmode}")
             conn = psycopg2.connect(
                 host=req.connection.host,
                 port=req.connection.port,

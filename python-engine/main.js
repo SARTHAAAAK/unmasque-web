@@ -21,17 +21,22 @@ app.post('/api/extract', async (req, res) => {
     // 1. LIVE DATABASE CONNECTION
     try {
         if (req.body.connection.type === 'PostgreSQL') {
+            const sslmode = req.body.connection.sslmode;
+            const sslVal = req.body.connection.ssl;
+            const sslConfig = sslmode === 'disable' ? false : (sslVal === 'require' ? { rejectUnauthorized: true } : { rejectUnauthorized: false });
+
             const client = new pg.Client({
                 host: req.body.connection.host,
                 port: req.body.connection.port || 5432,
                 database: req.body.connection.dbname,
                 user: req.body.connection.user,
-                password: req.body.connection.password
+                password: req.body.connection.password,
+                ssl: sslConfig
             });
             await client.connect();
             logs.push(`[CORE ENGINE] Successfully authenticated to PostgreSQL database.`);
             
-            const schema = req.body.config.schema || 'public';
+            const schema = req.body.connection.schema || req.body.config?.schema || 'public';
             await client.query(`SET search_path TO "${schema}"`);
             
             const selectedTables = req.body.config.selectedTables || [];
