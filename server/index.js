@@ -435,6 +435,9 @@ async function runRealPipeline(jobId) {
       throw new Error('Unsupported database type');
     }
 
+    // Preserve the server's own schema-based SQL before calling the engine
+    const schemaSql = extractedSql;
+    
     const pythonEngineUrl = process.env.PYTHON_ENGINE_URL;
     let pythonEngineUsed = false;
     const invStart = Date.now();
@@ -467,16 +470,30 @@ async function runRealPipeline(jobId) {
           job.logs.push(`[WARN] Python engine attempt ${attempt}/${maxRetries} failed: ${errMsg}`);
           if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: job.logs[job.logs.length - 1] });
           if (attempt < maxRetries) {
-            await new Promise(r => setTimeout(r, 2000)); // wait 2s before retry
+            await new Promise(r => setTimeout(r, 2000));
           }
         }
       }
 
       if (pythonEngineResponse && pythonEngineResponse.data) {
-        extractedSql = pythonEngineResponse.data.sql;
-        pythonEngineUsed = true;
+        const engineSql = pythonEngineResponse.data.sql || '';
+        const isGenericFallback = engineSql.includes('current_database()') || engineSql.includes('current_user') || engineSql.includes('@@VERSION');
+        
+        // Only use engine SQL if it contains real table references, not a generic fallback
+        if (!isGenericFallback && engineSql.trim().length > 0) {
+          extractedSql = engineSql;
+          pythonEngineUsed = true;
+          job.logs.push(`[INFO] Using Python engine extraction result.`);
+        } else if (schemaSql && !schemaSql.includes('current_database()')) {
+          // Engine returned generic output, but server has real schema SQL — keep server's
+          extractedSql = schemaSql;
+          job.logs.push(`[INFO] Engine returned generic output. Using server-side schema extraction instead.`);
+        } else {
+          extractedSql = engineSql;
+        }
+        
         const invDurationMs = Date.now() - invStart;
-        job.logs.push(`[INFO] Python engine extraction completed successfully in ${invDurationMs}ms.`);
+        job.logs.push(`[INFO] Extraction completed in ${invDurationMs}ms.`);
         if (pythonEngineResponse.data.logs && Array.isArray(pythonEngineResponse.data.logs)) {
           job.logs.push(...pythonEngineResponse.data.logs);
           if (io) {
@@ -486,7 +503,7 @@ async function runRealPipeline(jobId) {
           }
         }
       } else {
-        job.logs.push(`[WARN] Python engine unreachable after ${maxRetries} attempts. Falling back to direct DB schema extraction.`);
+        job.logs.push(`[WARN] Python engine unreachable. Using direct DB schema extraction.`);
         if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: job.logs[job.logs.length - 1] });
       }
     } else {
