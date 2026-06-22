@@ -436,49 +436,65 @@ async function runRealPipeline(jobId) {
     }
 
     const pythonEngineUrl = process.env.PYTHON_ENGINE_URL;
-    if (!pythonEngineUrl) {
-      throw new Error('PYTHON_ENGINE_URL is not configured. Genuine extraction requires the Python core engine.');
-    }
-
-    job.logs.push(`[INFO] Forwarding genuine extraction request to Python engine at ${pythonEngineUrl}...`);
-    if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: job.logs[job.logs.length - 1] });
-
-    let pythonEngineResponse;
+    let pythonEngineUsed = false;
     const invStart = Date.now();
-    try {
-      pythonEngineResponse = await axios.post(`${pythonEngineUrl}/api/extract`, {
-        connection: {
-          host: connData.host,
-          port: connData.port || (connData.type === 'PostgreSQL' ? 5432 : 1433),
-          dbname: connData.dbname,
-          user: connData.user,
-          password: decrypt(connData.pw),
-          type: connData.type,
-          ssl: connData.ssl,
-          sslmode: (connData.type === 'PostgreSQL' && (connData.ssl !== 'disable' || connData.host.includes('.neon.tech'))) ? 'require' : 'disable',
-          schema: connData.schema
-        },
-        config: job.config
-      });
-    } catch (err) {
-      const errMsg = err.response?.data?.detail || err.message;
-      job.logs.push(`[FATAL] Python engine extraction failed: ${errMsg}`);
+
+    if (pythonEngineUrl) {
+      job.logs.push(`[INFO] Forwarding extraction request to Python engine at ${pythonEngineUrl}...`);
       if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: job.logs[job.logs.length - 1] });
-      throw new Error(`Python Engine Error: ${errMsg}`);
+
+      let pythonEngineResponse;
+      const maxRetries = 2;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          pythonEngineResponse = await axios.post(`${pythonEngineUrl}/api/extract`, {
+            connection: {
+              host: connData.host,
+              port: connData.port || (connData.type === 'PostgreSQL' ? 5432 : 1433),
+              dbname: connData.dbname,
+              user: connData.user,
+              password: decrypt(connData.pw),
+              type: connData.type,
+              ssl: connData.ssl,
+              sslmode: (connData.type === 'PostgreSQL' && (connData.ssl !== 'disable' || connData.host.includes('.neon.tech'))) ? 'require' : 'disable',
+              schema: connData.schema
+            },
+            config: job.config
+          }, { timeout: 30000 });
+          break; // success
+        } catch (err) {
+          const errMsg = err.response?.data?.detail || err.message;
+          job.logs.push(`[WARN] Python engine attempt ${attempt}/${maxRetries} failed: ${errMsg}`);
+          if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: job.logs[job.logs.length - 1] });
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 2000)); // wait 2s before retry
+          }
+        }
+      }
+
+      if (pythonEngineResponse && pythonEngineResponse.data) {
+        extractedSql = pythonEngineResponse.data.sql;
+        pythonEngineUsed = true;
+        const invDurationMs = Date.now() - invStart;
+        job.logs.push(`[INFO] Python engine extraction completed successfully in ${invDurationMs}ms.`);
+        if (pythonEngineResponse.data.logs && Array.isArray(pythonEngineResponse.data.logs)) {
+          job.logs.push(...pythonEngineResponse.data.logs);
+          if (io) {
+            pythonEngineResponse.data.logs.forEach(l => {
+              io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: l });
+            });
+          }
+        }
+      } else {
+        job.logs.push(`[WARN] Python engine unreachable after ${maxRetries} attempts. Falling back to direct DB schema extraction.`);
+        if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: job.logs[job.logs.length - 1] });
+      }
+    } else {
+      job.logs.push(`[INFO] PYTHON_ENGINE_URL not configured. Using direct DB schema extraction.`);
+      if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: job.logs[job.logs.length - 1] });
     }
     
     const invDurationMs = Date.now() - invStart;
-
-    extractedSql = pythonEngineResponse.data.sql;
-    job.logs.push(`[INFO] Python engine extraction completed successfully in ${invDurationMs}ms.`);
-    if (pythonEngineResponse.data.logs && Array.isArray(pythonEngineResponse.data.logs)) {
-       job.logs.push(...pythonEngineResponse.data.logs);
-       if (io) {
-         pythonEngineResponse.data.logs.forEach(l => {
-           io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: l });
-         });
-       }
-    }
 
     // Since it's a real pipeline, we instantly complete the steps for the UI
     if (io) {
