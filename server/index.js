@@ -355,11 +355,24 @@ async function runRealPipeline(jobId) {
       if (selectedTables.length > 0) {
         const inClause = selectedTables.map(t => `'${t.replace(/'/g, "''")}'`).join(', ');
         queryStr += ` AND table_name IN (${inClause})`;
-      } else {
-        queryStr += ` ORDER BY table_name, ordinal_position LIMIT 50`;
+      }
+      queryStr += ` ORDER BY table_name, ordinal_position LIMIT 200`;
+      
+      let res = await client.query(queryStr);
+      
+      if (res.rows.length === 0 && selectedTables.length > 0) {
+        job.logs.push(`[INFO] Selected tables not found in schema '${schemaFilter}'. Discovering all available tables...`);
+        if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: job.logs[job.logs.length - 1] });
+        res = await client.query(`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = '${schemaFilter}' ORDER BY table_name, ordinal_position LIMIT 200`);
+        selectedTables = [];
       }
       
-      const res = await client.query(queryStr);
+      if (res.rows.length === 0) {
+        job.logs.push(`[INFO] No tables in schema '${schemaFilter}'. Searching all user schemas...`);
+        if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: job.logs[job.logs.length - 1] });
+        res = await client.query(`SELECT table_name, column_name FROM information_schema.columns WHERE table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY table_name, ordinal_position LIMIT 200`);
+      }
+      
       await client.end();
       
       const tables = {};
@@ -371,20 +384,27 @@ async function runRealPipeline(jobId) {
       let tableNames = selectedTables.length > 0 ? selectedTables.filter(t => tables[t]) : Object.keys(tables);
       
       if (tableNames.length > 0) {
-        const fromClause = tableNames.map(t => `"${t}"`).join(',\n    ');
         const selectCols = [];
+        const fromTables = [];
         for (const t of tableNames) {
+          fromTables.push(`"${t}"`);
           if (tables[t] && tables[t].length > 0) {
-            selectCols.push(`    "${t}"."${tables[t][0]}"`);
+            const useCols = tables[t].slice(0, 3);
+            useCols.forEach(c => selectCols.push(`    "${t}"."${c}"`));
           } else {
             selectCols.push(`    "${t}".*`);
           }
         }
-        extractedSql = `SELECT\n${selectCols.join(',\n')}\nFROM\n    ${fromClause};`;
-        job.logs.push(`[INFO] [EXTRACT] Successfully derived SQL query from live DB schema (${tableNames.length} tables).`);
+        extractedSql = `SELECT\n${selectCols.join(',\n')}\nFROM\n    ${fromTables.join(',\n    ')}`;
+        const firstCols = tables[tableNames[0]];
+        if (firstCols && firstCols.length > 0) {
+          extractedSql += `\nWHERE\n    "${tableNames[0]}"."${firstCols[0]}" IS NOT NULL`;
+        }
+        extractedSql += `\nLIMIT 1000;`;
+        job.logs.push(`[INFO] [EXTRACT] Successfully derived SQL query from live DB schema (${tableNames.length} tables, ${selectCols.length} columns).`);
       } else {
-        extractedSql = `SELECT current_database(), current_user, version();`;
-        job.logs.push(`[INFO] [EXTRACT] No public tables found, generating system fallback query.`);
+        extractedSql = `SELECT current_database() AS db_name, current_user AS connected_user, version() AS pg_version, now() AS extraction_time;`;
+        job.logs.push(`[INFO] [EXTRACT] Database has no user tables. Returning system metadata query.`);
       }
     } else if (connData.type === 'SQL Server') {
       const mssql = await import('mssql');
@@ -429,13 +449,12 @@ async function runRealPipeline(jobId) {
         job.logs.push(`[INFO] [EXTRACT] Successfully derived SQL query from live DB schema (${tableNames.length} tables).`);
       } else {
         extractedSql = `SELECT @@VERSION as version;`;
-        job.logs.push(`[INFO] [EXTRACT] No public tables found, generating system fallback query.`);
+        job.logs.push(`[INFO] [EXTRACT] No tables found, generating system fallback query.`);
       }
     } else {
       throw new Error('Unsupported database type');
     }
 
-    // Preserve the server's own schema-based SQL before calling the engine
     const schemaSql = extractedSql;
     
     const pythonEngineUrl = process.env.PYTHON_ENGINE_URL;
@@ -464,7 +483,7 @@ async function runRealPipeline(jobId) {
             },
             config: job.config
           }, { timeout: 30000 });
-          break; // success
+          break;
         } catch (err) {
           const errMsg = err.response?.data?.detail || err.message;
           job.logs.push(`[WARN] Python engine attempt ${attempt}/${maxRetries} failed: ${errMsg}`);
@@ -479,13 +498,11 @@ async function runRealPipeline(jobId) {
         const engineSql = pythonEngineResponse.data.sql || '';
         const isGenericFallback = engineSql.includes('current_database()') || engineSql.includes('current_user') || engineSql.includes('@@VERSION');
         
-        // Only use engine SQL if it contains real table references, not a generic fallback
         if (!isGenericFallback && engineSql.trim().length > 0) {
           extractedSql = engineSql;
           pythonEngineUsed = true;
           job.logs.push(`[INFO] Using Python engine extraction result.`);
         } else if (schemaSql && !schemaSql.includes('current_database()')) {
-          // Engine returned generic output, but server has real schema SQL — keep server's
           extractedSql = schemaSql;
           job.logs.push(`[INFO] Engine returned generic output. Using server-side schema extraction instead.`);
         } else {
@@ -513,7 +530,6 @@ async function runRealPipeline(jobId) {
     
     const invDurationMs = Date.now() - invStart;
 
-    // Since it's a real pipeline, we instantly complete the steps for the UI
     if (io) {
       for (let i = 0; i <= 9; i++) {
         io.of('/ws/jobs/' + jobId + '/stream').emit('step_completed', { jobId, stepIndex: i, stepName: 'Genuine Execution Phase', summary: 'Processed by Python Engine', durationMs: invDurationMs / 10 });
@@ -546,7 +562,6 @@ async function runRealPipeline(jobId) {
   } catch (err) {
     const errJob = await prisma.extraction.findUnique({ where: { id: jobId } });
     if (errJob && errJob.status !== 'aborted') {
-      // FIX: Use the in-memory job.logs to prevent wiping out the log history!
       let currentLogs = [];
       try {
         if (typeof job !== 'undefined' && Array.isArray(job.logs)) {
