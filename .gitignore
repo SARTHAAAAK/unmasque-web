@@ -51,3 +51,11 @@ coverage/
 
 dev.db
 *.db
+
+# Diagnostic and scratch files
+*.cjs
+diag.py
+read_db.py
+test_db.js
+check_neon.js
+check_neon.cjs

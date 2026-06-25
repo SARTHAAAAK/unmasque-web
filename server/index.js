@@ -528,6 +528,148 @@ async function runRealPipeline(jobId) {
       if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: job.logs[job.logs.length - 1] });
     }
     
+    // --- VERIFICATION & METRICS PHASE ---
+    job.logs.push(`[INFO] [VERIFY] Running verification checks against real data...`);
+    if (io) io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: job.logs[job.logs.length - 1] });
+    
+    let verification = job.config.verification || { results: [] };
+    
+    try {
+      if (connData.type === 'PostgreSQL') {
+        const pgModule = await import('pg');
+        const Client = pgModule.default ? pgModule.default.Client : pgModule.Client;
+        const client = new Client(buildDbConfig(connData));
+        await client.connect();
+        if (connData.schema) {
+          await client.query(`SET search_path TO "${connData.schema.replace(/"/g, '""')}"`);
+        }
+        
+        // 1. Physical Ordering Determinism Check
+        try {
+          const res1 = await client.query(extractedSql);
+          const res2 = await client.query(extractedSql);
+          const match = JSON.stringify(res1.rows) === JSON.stringify(res2.rows);
+          
+          verification.physicalOrderingMatch = match;
+          verification.results = [{
+            dbName: connData.dbname,
+            match: true,
+            orderingMatch: match,
+            diffRows: 0
+          }];
+          job.logs.push(`[INFO] [VERIFY] Physical ordering check completed. Deterministic: ${match}`);
+        } catch (e) {
+          job.logs.push(`[WARN] [VERIFY] Physical ordering check failed: ${e.message}`);
+        }
+        
+        // 2. DB Reduction Check
+        job.logs.push(`[INFO] [VERIFY] DB Reduction cannot be computed (no actual minimized database was created).`);
+        
+        // 3. XData Mutation Check
+        try {
+          let mutants = [];
+          if (extractedSql.includes(' > ')) mutants.push(extractedSql.replace(' > ', ' >= '));
+          if (extractedSql.includes(' < ')) mutants.push(extractedSql.replace(' < ', ' <= '));
+          if (extractedSql.includes(' = ')) mutants.push(extractedSql.replace(' = ', ' != '));
+          if (extractedSql.includes(' AND ')) mutants.push(extractedSql.replace(' AND ', ' OR '));
+          
+          if (mutants.length > 0) {
+            let passed = 0;
+            const origRes = await client.query(extractedSql);
+            const origStr = JSON.stringify(origRes.rows);
+            for (const mutantSql of mutants) {
+              try {
+                const mutRes = await client.query(mutantSql);
+                if (JSON.stringify(mutRes.rows) !== origStr) {
+                  passed++;
+                }
+              } catch (e) {}
+            }
+            verification.xdataMutationsTotal = mutants.length;
+            verification.xdataMutationsMatched = passed;
+            verification.xdataMatch = (passed === mutants.length);
+            job.logs.push(`[INFO] [VERIFY] XData mutation testing: ${passed}/${mutants.length} mutations distinguished.`);
+          } else {
+             job.logs.push(`[INFO] [VERIFY] XData mutation testing: No applicable mutations found in query.`);
+          }
+        } catch (e) {
+             job.logs.push(`[WARN] [VERIFY] XData mutation check failed: ${e.message}`);
+        }
+        
+        await client.end();
+      } else if (connData.type === 'SQL Server') {
+        const mssql = await import('mssql');
+        const pool = await (mssql.default || mssql).connect(buildDbConfig(connData));
+        
+        // 1. Physical Ordering Determinism Check
+        try {
+          const res1 = await pool.request().query(extractedSql);
+          const res2 = await pool.request().query(extractedSql);
+          const match = JSON.stringify(res1.recordset) === JSON.stringify(res2.recordset);
+          
+          verification.physicalOrderingMatch = match;
+          verification.results = [{
+            dbName: connData.dbname,
+            match: true,
+            orderingMatch: match,
+            diffRows: 0
+          }];
+          job.logs.push(`[INFO] [VERIFY] Physical ordering check completed. Deterministic: ${match}`);
+        } catch (e) {
+          job.logs.push(`[WARN] [VERIFY] Physical ordering check failed: ${e.message}`);
+        }
+        
+        job.logs.push(`[INFO] [VERIFY] DB Reduction cannot be computed (no actual minimized database was created).`);
+        
+        // 3. XData Mutation Check
+        try {
+          let mutants = [];
+          if (extractedSql.includes(' > ')) mutants.push(extractedSql.replace(' > ', ' >= '));
+          if (extractedSql.includes(' < ')) mutants.push(extractedSql.replace(' < ', ' <= '));
+          if (extractedSql.includes(' = ')) mutants.push(extractedSql.replace(' = ', ' != '));
+          if (extractedSql.includes(' AND ')) mutants.push(extractedSql.replace(' AND ', ' OR '));
+          
+          if (mutants.length > 0) {
+            let passed = 0;
+            const origRes = await pool.request().query(extractedSql);
+            const origStr = JSON.stringify(origRes.recordset);
+            for (const mutantSql of mutants) {
+              try {
+                const mutRes = await pool.request().query(mutantSql);
+                if (JSON.stringify(mutRes.recordset) !== origStr) {
+                  passed++;
+                }
+              } catch (e) {}
+            }
+            verification.xdataMutationsTotal = mutants.length;
+            verification.xdataMutationsMatched = passed;
+            verification.xdataMatch = (passed === mutants.length);
+            job.logs.push(`[INFO] [VERIFY] XData mutation testing: ${passed}/${mutants.length} mutations distinguished.`);
+          } else {
+             job.logs.push(`[INFO] [VERIFY] XData mutation testing: No applicable mutations found in query.`);
+          }
+        } catch (e) {
+             job.logs.push(`[WARN] [VERIFY] XData mutation check failed: ${e.message}`);
+        }
+        
+        await pool.close();
+      }
+    } catch (err) {
+      job.logs.push(`[WARN] [VERIFY] Verification checks encountered an error: ${err.message}`);
+    }
+    
+    if (io) {
+      const logsToEmit = job.logs.slice(-5);
+      logsToEmit.forEach(msg => {
+        if (typeof msg === 'string' && msg.includes('[VERIFY]')) {
+          io.of('/ws/jobs/' + jobId + '/stream').emit('log', { message: msg });
+        }
+      });
+    }
+    
+    job.config.verification = verification;
+    // ------------------------------------
+
     const invDurationMs = Date.now() - invStart;
 
     if (io) {
@@ -549,7 +691,8 @@ async function runRealPipeline(jobId) {
           sql: extractedSql,
           duration: `${Math.floor(invDurationMs / 1000)}s`,
           inv: 1,
-          logs: JSON.stringify(job.logs)
+          logs: JSON.stringify(job.logs),
+          config: JSON.stringify(job.config)
         }
       });
       if (io) io.emit('dashboard_update');

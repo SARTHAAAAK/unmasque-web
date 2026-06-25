@@ -68,7 +68,19 @@ export default function ResultsPage({ setPage, extractionId }) {
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <h2 style={{ fontFamily: FH, fontSize: 16, fontWeight: 700, color: C.text }}>{job?.name || 'Extraction Result'}</h2>
               <Badge status={job?.status || 'unknown'} />
-              {job?.status === 'completed' && <span style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>✅ Verified</span>}
+              {job?.status === 'completed' && (() => {
+                const v = job?.config?.verification;
+                const hasResults = v?.results?.length > 0;
+                const allResultsPass = hasResults && v.results.every(r => r.match && r.orderingMatch);
+                const xdataOk = v?.xdataMatch !== false; // true or undefined (no xdata test) is acceptable
+                const orderingOk = v?.physicalOrderingMatch !== false;
+                const verified = hasResults ? (allResultsPass && xdataOk && orderingOk) : false;
+                return verified
+                  ? <span style={{ fontSize: 12, color: C.green, fontWeight: 600 }}>✅ Verified</span>
+                  : hasResults
+                    ? <span style={{ fontSize: 12, color: C.red, fontWeight: 600 }}>❌ Verification Failed</span>
+                    : <span style={{ fontSize: 12, color: C.amber, fontWeight: 600 }}>⚠️ Not Verified</span>;
+              })()}
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Btn size="sm" variant="ghost" onClick={copySQL}>{copied ? '✓ Copied!' : '📋 Copy SQL'}</Btn>
@@ -218,7 +230,7 @@ export default function ResultsPage({ setPage, extractionId }) {
                   return [
                     { label: 'Total Invocations', val: job?.inv?.toLocaleString() || '—', sub: 'Across all pipeline steps', col: C.accent },
                     { label: 'Total Duration', val: job?.duration || '—', sub: 'End-to-end extraction', col: C.text },
-                    { label: 'DB Reduction', val: job?.status === 'running' ? 'Pending' : '99.99%', sub: `${job?.tables || 3} tables minified`, col: C.green },
+                    { label: 'DB Reduction', val: job?.config?.dbReduction ? `${job.config.dbReduction}%` : 'N/A', sub: job?.config?.dbReduction ? `${job?.tables || 0} tables minified` : 'Not computed', col: job?.config?.dbReduction ? C.green : C.muted },
                     { label: `${fastest?.s || 'Step'} (fastest)`, val: `${fastest?.t || 0}s`, sub: 'Quickest pipeline stage', col: C.cyan },
                     { label: `${slowest?.s || 'Step'} (slowest)`, val: `${slowest?.t || 0}s`, sub: 'Most intensive stage', col: C.amber },
                     { label: 'Overhead ratio', val: job?.status === 'running' ? '—' : (job?.config?.overheadRatio ? job.config.overheadRatio + '×' : '—'), sub: 'vs native query execution', col: C.purple },
@@ -275,12 +287,40 @@ export default function ResultsPage({ setPage, extractionId }) {
                 </table>
               </Section>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div style={{ background: `${C.green}10`, border: `1px solid ${C.green}40`, borderRadius: 8, padding: '12px 14px', fontSize: 12, color: C.green }}>
-                  {job?.config?.verification?.xdataMatch ? '✅' : '❌'} XData mutation testing: {job?.config?.verification?.xdataMutationsMatched || 0} of {job?.config?.verification?.xdataMutationsTotal || 0} mutations correctly distinguished
-                </div>
-                <div style={{ background: `${C.green}10`, border: `1px solid ${C.green}40`, borderRadius: 8, padding: '12px 14px', fontSize: 12, color: C.green }}>
-                  ✅ Physical ordering: positional checksums match on all random databases
-                </div>
+                {(() => {
+                  const v = job?.config?.verification;
+                  const xTotal = v?.xdataMutationsTotal || 0;
+                  const xMatched = v?.xdataMutationsMatched || 0;
+                  const hasXData = xTotal > 0;
+                  const xPass = hasXData && v?.xdataMatch;
+                  const xColor = !hasXData ? C.muted : xPass ? C.green : C.red;
+                  return (
+                    <div style={{ background: `${xColor}10`, border: `1px solid ${xColor}40`, borderRadius: 8, padding: '12px 14px', fontSize: 12, color: xColor }}>
+                      {!hasXData
+                        ? '— XData mutation testing: No verification data available'
+                        : `${xPass ? '✅' : '❌'} XData mutation testing: ${xMatched} of ${xTotal} mutations correctly distinguished`}
+                    </div>
+                  );
+                })()}
+                {(() => {
+                  const v = job?.config?.verification;
+                  const hasOrderingData = v?.physicalOrderingMatch !== undefined;
+                  const orderingPass = v?.physicalOrderingMatch === true;
+                  const hasResults = v?.results?.length > 0;
+                  const allOrderingMatch = hasResults && v.results.every(r => r.orderingMatch);
+                  const resolved = hasOrderingData ? orderingPass : (hasResults ? allOrderingMatch : false);
+                  const hasAnyData = hasOrderingData || hasResults;
+                  const color = !hasAnyData ? C.muted : resolved ? C.green : C.red;
+                  return (
+                    <div style={{ background: `${color}10`, border: `1px solid ${color}40`, borderRadius: 8, padding: '12px 14px', fontSize: 12, color }}>
+                      {!hasAnyData
+                        ? '— Physical ordering: No verification data available'
+                        : resolved
+                          ? '✅ Physical ordering: positional checksums match on all random databases'
+                          : '❌ Physical ordering: positional checksum mismatch detected'}
+                    </div>
+                  );
+                })()}
               </div>
             </Card>
           )}

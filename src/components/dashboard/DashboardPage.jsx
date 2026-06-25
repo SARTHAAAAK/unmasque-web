@@ -60,6 +60,47 @@ export default function DashboardPage({ setPage }) {
   const runningJobs = useMemo(() => items.filter(j => j.status === 'running'), [items])
   const runningJob = runningJobs[0]
 
+  // ── Live tracking for active job ──
+  const TOTAL_STEPS = 10
+  const STEP_NAMES = [
+    'FROM Clause Extraction', 'Database Minimization', 'Join Predicate Extraction',
+    'Filter Predicate Extraction', 'Projection Column Extraction', 'GROUP BY Extraction',
+    'Aggregation Function ID', 'ORDER BY Extraction', 'LIMIT Extraction', 'Query Assembly & Verification'
+  ]
+  const [liveStep, setLiveStep] = useState(0)
+  const [liveProgress, setLiveProgress] = useState(0)
+  const [liveElapsed, setLiveElapsed] = useState(0)
+
+  useEffect(() => {
+    if (!runningJob) { setLiveStep(0); setLiveProgress(0); setLiveElapsed(0); return }
+
+    // Elapsed timer from real startedAt
+    const startMs = runningJob.startedAt ? new Date(runningJob.startedAt).getTime() : Date.now()
+    setLiveElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)))
+    const timer = setInterval(() => {
+      setLiveElapsed(Math.max(0, Math.floor((Date.now() - startMs) / 1000)))
+    }, 1000)
+
+    // Socket for step events
+    const jobSocket = io('/ws/jobs/' + runningJob.id + '/stream', { path: '/ws/socket.io' })
+    jobSocket.on('step_started', (data) => {
+      if (data.jobId !== runningJob.id) return
+      setLiveStep(data.stepIndex)
+    })
+    jobSocket.on('step_completed', (data) => {
+      if (data.jobId !== runningJob.id) return
+      setLiveProgress(Math.round(((data.stepIndex + 1) / TOTAL_STEPS) * 100))
+    })
+
+    return () => { clearInterval(timer); jobSocket.disconnect() }
+  }, [runningJob?.id])
+
+  const fmtElapsed = (s) => {
+    const m = Math.floor(s / 60)
+    const sec = s % 60
+    return m > 0 ? `${m}m ${String(sec).padStart(2, '0')}s` : `${sec}s`
+  }
+
   const total = totalExtractions
   const successful = useMemo(() => items.filter(j => j.status === 'completed').length, [items])
   const successRate = total > 0 ? Math.round((successful / total) * 100) : 0
@@ -153,11 +194,11 @@ export default function DashboardPage({ setPage }) {
                 {runningJob.name}
               </div>
               <div style={{ fontSize: 12, color: C.cyan, marginBottom: 10 }}>
-                ⏳ Step 3/10 — Join Predicate Extraction
+                ⏳ Step {Math.min(liveStep + 1, TOTAL_STEPS)}/{TOTAL_STEPS} — {STEP_NAMES[liveStep] || 'Initializing...'}
               </div>
-              <ProgressBar value={30} style={{ marginBottom: 8 }} />
+              <ProgressBar value={liveProgress} style={{ marginBottom: 8 }} />
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.muted, marginBottom: 14 }}>
-                <span>30% complete</span><span>Elapsed: 2m 45s</span>
+                <span>{liveProgress}% complete</span><span>Elapsed: {fmtElapsed(liveElapsed)}</span>
               </div>
               <Btn size="sm" onClick={() => setPage('monitor')}>View Live Monitor →</Btn>
             </Card>
